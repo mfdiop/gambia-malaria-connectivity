@@ -1,0 +1,56 @@
+# =============================================================================
+# Gambia malaria connectivity — .gitignore
+# =============================================================================
+
+# -------- Data (large; may include identifiable coordinates) -----------------
+# Track via a separate data-sharing process, not via git.
+data/
+
+# -------- Analysis outputs ---------------------------------------------------
+# All scripts in codes/ regenerate these from data/. Do not version-control.
+results/
+
+# -------- R / RStudio --------------------------------------------------------
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj.user
+*-Ex.R
+.Rapp.history
+
+# Renv / packrat (if introduced later)
+renv/library/
+renv/local/
+renv/cellar/
+renv/lock/
+renv/python/
+renv/staging/
+packrat/lib*/
+packrat/src/
+
+# -------- Generated / temp ---------------------------------------------------
+*.log
+*.aux
+*.out
+*.toc
+*.synctex.gz
+*.tmp
+*.swp
+*~
+
+# -------- OS files -----------------------------------------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+Desktop.ini
+
+# -------- IDE / editor -------------------------------------------------------
+.vscode/
+.idea/
+*.iml
+
+# -------- Word doc rebuilds (keep .md source, ignore rendered .docx/.pdf) ---
+notes/*.docx
+notes/*.pdf
