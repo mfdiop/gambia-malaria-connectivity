@@ -7,17 +7,45 @@ This work extends Amambua-Ngwa et al. (2019) — which used 54-SNP barcodes to d
 ## Project structure
 
 ```
-codes/                            # Numbered, phase-ordered R scripts (see Analysis pipeline)
-data/
+codes/                                   # Analysis scripts (phase-based + exploratory variants)
+  phase1_01_wgs_qc.R
+  phase1_02_coi_stratification.R
+  phase1_03_sample_annotation.R
+  phase2_01_fst_ibd_mantel.R
+  phase2_02_pca_admixture.R
+  phase2_02_pca_lea.R
+  phase2_02_pca_lea_extendK.R
+  phase2_03_hmmibd.R
+  phase3_01_supervised_admixture.R
+  phase3_02_directional_ibd.R
+  phase3_03_isolation.R
+  clustering_approaches.R
+  clustering_approaches_v1.R
+data/                                    # Primary genomics inputs and metadata
+  gambia.vcf
+  senegam_pf.vcf
   gambia_2014isolates/
-    gambia.ann.vcf.gz             # Annotated WGS, 2014 Gambia (160 samples, 16,390 biallelic SNPs)
   metadata/
-    GamMetadata_2014.xlsx         # Sample metadata: village, household, COI, lat/lon
-notes/
-  objective3_proposal.md          # Five-phase analysis plan (source of truth)
-  directional_connectivity_Amambua-Ngwamodel.md  # Implementation spec for the transmission-path model
-results/                          # Figures, tables, intermediate RDS objects
-CLAUDE.md                         # Guidance for Claude Code working in this repo
+notes/                                   # Study plan and modelling notes
+  objective3_proposal.md
+  objective3_proposal.docx
+  directional_connectivity_Amambua-Ngwamodel.md
+results/                                 # Script outputs organized by phase
+  phase1_01/
+  phase1_02/
+  phase1_03/
+  phase2_01/
+  phase2_02_lea/
+  phase2_03/
+  phase3_01/
+  phase3_02/
+  phase3_03/
+  phase4_01/
+tools/
+  hmmIBD/                                # Local helper assets/utilities for hmmIBD workflows
+gambia-malaria-connectivity.Rproj        # RStudio project entry point
+CLAUDE.md                                # Local coding-agent guidance
+SampleMetadata.txt                       # Auxiliary metadata text file
 ```
 
 ## Data
@@ -32,7 +60,7 @@ Reference: *P. falciparum* 3D7 (`Pf3D7_*_v3` contigs). VCF is already annotated 
 
 ## Analysis pipeline
 
-The five phases of `notes/objective3_proposal.md` map to numbered scripts in `codes/`:
+Current implemented phases map to numbered scripts in `codes/`:
 
 | Phase | Step | Script |
 |---|---|---|
@@ -41,15 +69,12 @@ The five phases of `notes/objective3_proposal.md` map to numbered scripts in `co
 |  | 1.3 Regional/temporal annotation | `phase1_03_sample_annotation.R` |
 | 2. Pop-genetic background | 2.1 FST + isolation-by-distance | `phase2_01_fst_ibd_mantel.R` |
 |  | 2.2 PCA + ADMIXTURE | `phase2_02_pca_admixture.R` |
-|  | 2.3 Baseline IBD landscape | `phase2_03_hmmibd_baseline.R` |
-| 3. Importation | 3.1 Ancestry deconvolution | `phase3_01_ancestry_deconvolution.R` |
-|  | 3.2 IBD transmission chains | `phase3_02_transmission_paths.R` |
-|  | 3.3 Genomic isolation tests | `phase3_03_isolation_signals.R` |
-| 4. Cross-border (Senegal) | 4.1 Gambia–Senegal IBD | `phase4_01_crossborder_ibd.R` |
-|  | 4.2 TreeMix graph | `phase4_02_treemix.R` |
-|  | 4.3 Resistance haplotype origin | `phase4_03_resistance_ancestry.R` |
-| 5. Synthesis | 5.1 Bayesian attribution | `phase5_01_attribution_model.R` |
-|  | 5.2 Sensitivity | `phase5_02_sensitivity.R` |
+|  | 2.3 Baseline IBD landscape | `phase2_03_hmmibd.R` |
+| 3. Importation | 3.1 Supervised admixture | `phase3_01_supervised_admixture.R` |
+|  | 3.2 Directional IBD/transmission chains | `phase3_02_directional_ibd.R` |
+|  | 3.3 Genomic isolation tests | `phase3_03_isolation.R` |
+
+Phases 4–5 in `notes/objective3_proposal.md` are planned but do not yet have corresponding scripts in `codes/`.
 
 Each script is self-contained and re-runnable: reads VCF + metadata, writes outputs to `results/`, and persists intermediate objects (RDS) for downstream phases.
 
