@@ -5,8 +5,8 @@
 # metadata) and stratifies QC-passed samples into the categories defined in
 # notes/objective3_proposal.md §6 Phase 1, Step 1.2:
 #
-#   - Monoclonal       (COI = 1) — primary set for haplotype-level analyses
-#   - Low polyclonal   (COI 2–3) — include in IBD analyses using dcifer
+#   - Monoclonal       (COI = 1)  — primary set for haplotype-level analyses
+#   - Low polyclonal   (COI 2–3)  — include in IBD analyses using dcifer
 #   - High polyclonal  (COI >= 4) — flag for sensitivity analysis; exclude
 #                                   from directional inference
 #
@@ -27,17 +27,28 @@
 #            gambia_2014_qc_polyclonal_high.vcf.gz  VCF subset, COI >= 4 (if any)
 # =============================================================================
 
+# --- snakemake interface (no-op when sourced interactively) -----------------
+.args <- commandArgs(trailingOnly = TRUE)
+.parse_arg <- function(name, default) {
+  hit <- grep(paste0("^--", name, "="), .args, value = TRUE)
+  if (length(hit) == 0) default else sub(paste0("^--", name, "="), "", hit)
+}
+
+input_dir  <- .parse_arg("input_dir",  "results/phase1_01")
+output_dir <- .parse_arg("output_dir", "results/phase1_02")
+# --- end snakemake interface ------------------------------------------------
+
 suppressPackageStartupMessages({
    library(tidyverse)
    library(readxl)
 })
 
 # ----- Paths ----------------------------------------------------------------
-vcf_qc   <- "results/phase1_01/gambia_2014_qc.vcf.gz"
-keep_in  <- "results/phase1_01/samples_keep.txt"
+vcf_qc   <- file.path(input_dir, "gambia_2014_qc.vcf.gz")
+keep_in  <- file.path(input_dir, "samples_keep.txt")
 meta_in  <- "data/metadata/GamMetadata_2014.xlsx"
 
-out_dir  <- "results/phase1_02"
+out_dir  <- output_dir
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 # ----- Log helper -----------------------------------------------------------
@@ -102,6 +113,7 @@ for (nm in names(tab_cl)) log_msg(sprintf("  %-18s %d", nm, tab_cl[[nm]]))
 concord <- strat %>%
    count(stratum_McCOIL, stratum_COIL, name = "n") %>%
    arrange(desc(n))
+
 write_tsv(concord, file.path(out_dir, "coi_concordance.tsv"))
 
 n_agree <- sum(strat$stratum_McCOIL == strat$stratum_COIL, na.rm = TRUE)
@@ -113,6 +125,7 @@ log_msg(sprintf("\nCOIL/McCOIL agreement: %d / %d (%.1f%%)",
 # 4. Write per-stratum keep-lists and subset VCFs (primary = McCOIL)
 # ============================================================================
 strata <- c("monoclonal", "polyclonal_low", "polyclonal_high")
+
 strat_files <- c(monoclonal      = file.path(out_dir, "gambia_2014_qc_monoclonal.vcf.gz"),
                  polyclonal_low  = file.path(out_dir, "gambia_2014_qc_polyclonal_low.vcf.gz"),
                  polyclonal_high = file.path(out_dir, "gambia_2014_qc_polyclonal_high.vcf.gz"))
@@ -145,25 +158,45 @@ if (length(na_ids) > 0) {
 # ============================================================================
 # 5. Diagnostic plot
 # ============================================================================
+theme_fig <- function() {
+   theme_bw() +
+      theme(
+         legend.title = element_text(size = 16, color = "black", face = "bold"),
+         legend.text = element_text(size = 13, color = "black", face = "bold"),
+         plot.title        = element_text(size = 16, color = "black", face = "bold"),
+         axis.title        = element_text(size = 16, color = "black", face = "bold"),
+         axis.text         = element_text(size = 15, color = "black"),
+         axis.line         = element_line(linewidth = 1, colour = "black", lineend = "square"),
+         axis.ticks        = element_line(color = "black", linewidth = 0.7),
+         axis.ticks.length = unit(0.22, "cm")
+      )
+}
+
 plot_df <- bind_rows(
    strat %>% transmute(method = "McCOIL", stratum = stratum_McCOIL),
    strat %>% transmute(method = "COIL",   stratum = stratum_COIL)) %>%
-   mutate(stratum = factor(replace_na(stratum, "NA"),
-                           levels = c("monoclonal", "polyclonal_low",
-                                      "polyclonal_high", "NA")))
+   mutate(stratum = recode(stratum, 
+                           "monoclonal" = "Monoclonal", 
+                           "polyclonal_low" = "Polyclonal\n(COI = 2-3)",
+                           "polyclonal_high" = "Polyclonal\n(COI > 3)"),
+      stratum = factor(replace_na(stratum, "NA"),
+                           levels = c("Monoclonal", "Polyclonal\n(COI = 2-3)",
+                                      "Polyclonal\n(COI > 3)", "NA")))
 
 p <- ggplot(plot_df, aes(x = method, fill = stratum)) +
    geom_bar(position = "stack", colour = "white") +
-   scale_fill_manual(values = c(monoclonal      = "#2c7fb8",
-                                polyclonal_low  = "#f7b733",
-                                polyclonal_high = "#d7191c",
+   scale_fill_manual(values = c("Monoclonal"      = "#2c7fb8",
+                                "Polyclonal\n(COI = 2-3)"  = "#f7b733",
+                                "Polyclonal\n(COI > 3)" = "#d7191c",
                                 `NA`            = "grey70")) +
-   labs(title = "COI stratification — McCOIL (primary) vs COIL (sensitivity)",
-        subtitle = sprintf("QC-passed samples (n=%d)", nrow(strat)),
+   labs(title = "COI stratification ", # — McCOIL (primary) vs COIL (sensitivity)
+        # subtitle = sprintf("QC-passed samples (n=%d)", nrow(strat)),
         x = NULL, y = "Samples", fill = "Stratum") +
-   theme_minimal(base_size = 12)
+   theme_minimal(base_size = 12) + theme_fig()
 
-ggsave(file.path(out_dir, "coi_distribution.pdf"), p,
+print(p)
+
+ggsave(file.path(out_dir, "coi_distribution.pdf"), plot = p,
        width = 6, height = 4, dpi = 600)
 
 # ============================================================================
