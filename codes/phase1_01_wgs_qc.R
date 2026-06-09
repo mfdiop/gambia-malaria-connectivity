@@ -27,6 +27,15 @@
 # Tools  : bcftools (system), vcftools (system), R (vcfR, tidyverse, readxl)
 # =============================================================================
 
+# --- snakemake interface (no-op when sourced interactively) -----------------
+.args <- commandArgs(trailingOnly = TRUE)
+.parse_arg <- function(name, default) {
+  hit <- grep(paste0("^--", name, "="), .args, value = TRUE)
+  if (length(hit) == 0) default else sub(paste0("^--", name, "="), "", hit)
+}
+output_dir <- .parse_arg("output_dir", "results/phase1_01")
+# --- end snakemake interface ------------------------------------------------
+
 suppressPackageStartupMessages({
    library(tidyverse)
    library(readxl)
@@ -36,7 +45,7 @@ suppressPackageStartupMessages({
 # ----- Paths ----------------------------------------------------------------
 vcf_in      <- "data/gambia_2014isolates/gambia.ann.vcf.gz"
 meta_in     <- "data/metadata/GamMetadata_2014.xlsx"
-out_dir     <- "results/phase1_01"
+out_dir     <- output_dir
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 vcf_core    <- file.path(out_dir, "gambia_2014_core.vcf.gz")           # after RegionType==Core
