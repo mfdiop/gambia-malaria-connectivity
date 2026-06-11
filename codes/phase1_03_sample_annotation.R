@@ -154,6 +154,7 @@ for (i in seq_len(nrow(n_per_season)))
 # Region x season
 rs <- master %>% count(region, transmission_season) %>%
    pivot_wider(names_from = transmission_season, values_from = n, values_fill = 0)
+
 write_tsv(rs, file.path(out_dir, "region_counts.tsv"))
 
 log_msg("\nRegion x season cross-tab:")
