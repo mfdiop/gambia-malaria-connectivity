@@ -195,6 +195,23 @@ Priors derived from: ADMIXTURE ancestry proportions (informative prior), travel 
 Repeat the attribution analysis under: (a) different IBD thresholds, (b) excluding travel-constrained samples, (c) using barcode data as a validation dataset for the 2013 season where both barcode and WGS are available.
 
 
+## Phase 6 — Reviewer-driven extensions
+
+A supervisor-style review raised four code gaps and one out-of-scope exploration. Phase 6 closes them, all on the monoclonal Gambia subset built in Phase 1:
+
+| Step | Analysis | Reviewer concern addressed |
+|---|---|---|
+| 6.1 | ChromoPainter + fineSTRUCTURE haplotype co-ancestry | sNMF / ADMIXTURE alone over-interprets long-term ancestry as recent migration |
+| 6.2 | IBD tract-length structure (parsed from hmmIBD `.hmm.txt`) | Total IBD conflates recent and ancient sharing |
+| 6.3 | IBD network topology (Louvain communities, betweenness, bridges) | Pair-level IBD misses hubs / bridges / community structure |
+| 6.4 | Stratified label-permutation null for Phase 3.2 directional asymmetry | No explicit symmetric-migration null exists for the asymmetry claim |
+| 6.5 | EEMS spatial migration / diversity surface (exploratory) | Where, on the map, does effective migration deviate from isolation by distance? |
+
+### Deferred methods (post-manuscript)
+
+The reviewer also flagged MASCOT/BASTA (structured coalescent), Relate (genome-wide genealogies), and tsinfer/tsdate (ARG inference). All three are explicitly deferred to post-manuscript exploration. EEMS is the only one of the four advanced spatial-genomic methods admitted into the pipeline for this chapter, on the grounds that it extends the Phase 2 IBD-by-distance story most cleanly and is the only one that finishes in PhD-realistic time without Pf-phasing pain.
+
+
 ## 7. Statistical Framework
 
 | Analysis | Tool / Package |
