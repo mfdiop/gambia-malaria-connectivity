@@ -175,7 +175,8 @@ pair_df <- pair_df %>%
          fract_sites_IBD >  IBD_HIGH                                  ~ "high",
          fract_sites_IBD >= IBD_MOD_LO & fract_sites_IBD <= IBD_HIGH ~ "moderate",
          TRUE                                                         ~ "unrelated"),
-      pair_type = ifelse(region1_chr == region2_chr, "within-region", "cross-region"),
+      pair_village = ifelse(VillageCode1 == VillageCode2, "Within-village", "Between-village"),
+      pair_type = ifelse(region1_chr == region2_chr, "Within-region", "Cross-region"),
       region_pair = ifelse(region1_chr < region2_chr,
                            paste(region1_chr, region2_chr, sep = " <-> "),
                            paste(region2_chr, region1_chr, sep = " <-> ")))
@@ -186,7 +187,7 @@ n_high <- sum(pair_df$ibd_class == "high")
 n_mod  <- sum(pair_df$ibd_class == "moderate")
 log_msg(sprintf("Pair classification: high = %d, moderate = %d, unrelated = %d",
                 n_high, n_mod, sum(pair_df$ibd_class == "unrelated")))
-log_msg(sprintf("Median fract_sites_IBD: %.4f",
+log_msg(sprintf("Median fract_sites_IBD: %.3f",
                 median(pair_df$fract_sites_IBD, na.rm = TRUE)))
 
 # ============================================================================
@@ -197,11 +198,14 @@ ibd_mat <- matrix(NA_real_, nrow = length(samp), ncol = length(samp),
                   dimnames = list(samp, samp))
 diag(ibd_mat) <- 1
 ibd_mat[cbind(match(pair_df$SampleID1, samp),
-              match(pair_df$SampleID2, samp))] <- pair_df$fract_sites_IBD
+              match(pair_df$SampleID2, samp))] <- round(pair_df$fract_sites_IBD, 3)
 ibd_mat[cbind(match(pair_df$SampleID2, samp),
-              match(pair_df$SampleID1, samp))] <- pair_df$fract_sites_IBD
+              match(pair_df$SampleID1, samp))] <- round(pair_df$fract_sites_IBD, 3)
+
+# Save IBD matrix
 write_tsv(as_tibble(ibd_mat, rownames = "SampleID"),
           file.path(out_dir, "ibd_matrix.tsv"))
+
 # Standalone RDS so downstream rules can depend on a single declared file
 saveRDS(ibd_mat, file.path(out_dir, "ibd_matrix.rds"))
 
@@ -209,7 +213,7 @@ saveRDS(ibd_mat, file.path(out_dir, "ibd_matrix.rds"))
 # 7. Distribution + within vs cross-region IBD
 # ============================================================================
 p_hist <- ggplot(pair_df, aes(x = fract_sites_IBD)) +
-   geom_histogram(bins = 80, fill = "steelblue", colour = "white") +
+   geom_histogram(bins = 60, fill = "steelblue", colour = "white") +
    geom_vline(xintercept = c(IBD_MOD_LO, IBD_HIGH),
               linetype = "dashed", colour = "red") +
    annotate("text", x = IBD_MOD_LO + 0.005, y = Inf,
@@ -219,23 +223,41 @@ p_hist <- ggplot(pair_df, aes(x = fract_sites_IBD)) +
             label = "high (> 0.5)", hjust = 0, vjust = 1.4,
             size = 3, colour = "red") +
    labs(title = "Pairwise IBD distribution (hmmIBD, monoclonal)",
-        x = "fract_sites_IBD", y = "Number of pairs") +
-   theme_minimal()
+        x = "fract_sites_IBD", y = "Number of isolates pairs") +
+   theme_minimal(base_size = 12) +
+   theme(
+      plot.title        = element_text(size = 15, color = "black", face = "bold"),
+      axis.title        = element_text(size = 15, colour = "black", face = "bold"),
+      axis.text         = element_text(size = 13, colour = "black"),
+      axis.line         = element_line(linewidth = 1, colour = "black", lineend = "square"),
+      axis.ticks        = element_line(color = "black", linewidth = 0.7),
+      axis.ticks.length = unit(0.22, "cm")
+   )
+
 ggsave(file.path(out_dir, "ibd_distribution.pdf"), p_hist,
        width = 7.5, height = 4.5, dpi = 600)
 
 p_box <- ggplot(pair_df, aes(x = pair_type, y = fract_sites_IBD,
                               fill = pair_type)) +
-   geom_violin(alpha = 0.4) +
-   geom_boxplot(width = 0.18, outlier.alpha = 0.3) +
-   scale_fill_manual(values = c("within-region" = "steelblue",
-                                "cross-region"  = "tomato"),
+   geom_violin(alpha = 0.6) +
+   geom_boxplot(width = 0.18, outlier.alpha = 0.4) +
+   scale_fill_manual(values = c("Within-region" = "steelblue",
+                                "Cross-region"  = "tomato"),
                      guide = "none") +
    geom_hline(yintercept = c(IBD_MOD_LO, IBD_HIGH),
-              linetype = "dashed", colour = "grey40") +
-   labs(title = "Within-region vs cross-region pairwise IBD",
-        x = NULL, y = "fract_sites_IBD") +
-   theme_minimal()
+              linetype = "dashed", colour = "grey30") +
+   labs(title = "Within- vs Cross-region pairwise IBD",
+        x = NULL, y = "Fraction sites IBD") +
+   theme_minimal() +
+   theme(
+      plot.title        = element_text(size = 15, color = "black", face = "bold"),
+      axis.title        = element_text(size = 15, colour = "black", face = "bold"),
+      axis.text         = element_text(size = 13, colour = "black"),
+      axis.line         = element_line(linewidth = 1, colour = "black", lineend = "square"),
+      axis.ticks        = element_line(color = "black", linewidth = 0.7),
+      axis.ticks.length = unit(0.22, "cm")
+   )
+
 ggsave(file.path(out_dir, "ibd_within_vs_cross_region.pdf"), p_box,
        width = 6, height = 4.5, dpi = 600)
 
@@ -244,14 +266,102 @@ wt <- wilcox.test(fract_sites_IBD ~ pair_type, data = pair_df)
 log_msg(sprintf("Wilcoxon within vs cross-region: W = %.0f, p = %.3g",
                 wt$statistic, wt$p.value))
 
+# Wilcoxon within vs cross-region: W = 13664234, p = 6.33e-20
+
+pair_df %>% 
+   group_by(pair_type) %>% 
+   summarise(
+      N = n(),
+      Mean = mean(fract_sites_IBD),
+      Median = median(fract_sites_IBD),
+      .groups = "drop"
+   )
+
+# ============================================================================
+# 7. Distribution + within vs cross-village IBD
+# ============================================================================
+p_vil <- pair_df %>% 
+   mutate(pair_village = factor(pair_village, levels = c("Within-village", "Between-village"))) %>% 
+   ggplot(aes(x = pair_village, 
+              y = fract_sites_IBD, 
+              fill = pair_village)) +
+   geom_violin(alpha = 0.6) +
+   geom_boxplot(width = 0.18, outlier.alpha = 0.4) +
+   geom_hline(yintercept = c(IBD_MOD_LO, IBD_HIGH),
+              linetype = "dashed", colour = "grey30") +
+   labs(title = "Within- vs Between-village pairwise IBD",
+        x = NULL, y = "Fraction sites IBD") +
+   theme_minimal() +
+   theme(
+      legend.position = "none",
+      plot.title        = element_text(size = 15, color = "black", face = "bold"),
+      axis.title        = element_text(size = 15, colour = "black", face = "bold"),
+      axis.text         = element_text(size = 13, colour = "black"),
+      axis.line         = element_line(linewidth = 1, colour = "black", lineend = "square"),
+      axis.ticks        = element_line(color = "black", linewidth = 0.7),
+      axis.ticks.length = unit(0.22, "cm")
+   )
+
+ggsave(file.path(out_dir, "ibd_within_vs_cross_village.pdf"), 
+       plot = p_vil, width = 6, height = 4.5, dpi = 600)
+
+# Wilcoxon test for the cross-vs-within shift
+wt <- wilcox.test(fract_sites_IBD ~ pair_village, data = pair_df)
+log_msg(sprintf("Wilcoxon within vs cross-region: W = %.0f, p = %.3g",
+                wt$statistic, wt$p.value))
+
+pair_df %>% 
+   group_by(pair_village) %>% 
+   summarise(
+      N = n(),
+      Mean = mean(fract_sites_IBD),
+      Median = median(fract_sites_IBD),
+      .groups = "drop"
+   )
+
+
+# Effect Sizes
+# P-values tell you whether a difference exists. Effect sizes tell you how large the difference is.
+# 
+# For publication-quality analyses, I strongly recommend reporting:
+#    
+# - Rank-biserial correlation (easy interpretation)
+# - Cliff's Delta (robust non-parametric effect size)
+# - Hodges–Lehmann estimate (difference magnitude)
+
+rstatix::wilcox_effsize(
+   pair_df,
+   fract_sites_IBD ~ pair_type
+)
+
+effectsize::rank_biserial(
+   fract_sites_IBD ~ pair_type,
+   data = pair_df
+)
+
+
+effsize::cliff.delta(
+   fract_sites_IBD ~ pair_type,
+   data = pair_df
+)
+
+wilcox.test(
+   fract_sites_IBD ~ pair_type,
+   data = pair_df,
+   conf.int = TRUE
+)
+
 # ============================================================================
 # 8. Chord diagram: region-level adjacency of high-IBD pairs
 # ============================================================================
-high_pairs <- pair_df %>% filter(ibd_class == "high")
+high_pairs <- pair_df %>% 
+   filter(ibd_class == "high") %>% 
+   mutate(regio)
+
 log_msg(sprintf("High-IBD pairs (n = %d): within = %d, cross-region = %d",
                 nrow(high_pairs),
-                sum(high_pairs$pair_type == "within-region"),
-                sum(high_pairs$pair_type == "cross-region")))
+                sum(high_pairs$pair_type == "Within-region"),
+                sum(high_pairs$pair_type == "Cross-region")))
 
 if (nrow(high_pairs) > 0) {
    region_adj <- high_pairs %>%
@@ -278,14 +388,19 @@ if (nrow(high_pairs) > 0) {
 # 9. Geographic network of high-IBD pairs (village centroids)
 # ============================================================================
 cent_raw <- read_tsv(centroid_in, show_col_types = FALSE)
+gc <- read_csv("data/metadata/gc_distances.csv", show_col_types = FALSE)
+
 # Dedupe to one centroid per Location (the centroid file has one row per
 # VillageCode, and several Locations aggregate multiple VillageCodes — see
 # phase1_03_sample_annotation.R). Within-Location centroids are averaged
 # weighted by sample count.
 cent <- cent_raw %>%
+   inner_join(., gc, by = c("VillageCode" = "villages")) %>% 
    group_by(Location, region) %>%
    summarise(lon = weighted.mean(lon, n),
              lat = weighted.mean(lat, n),
+             longitute = weighted.mean(longitute, n),
+             latitude = weighted.mean(latitude, n),
              n   = sum(n), .groups = "drop")
 
 if (nrow(high_pairs) > 0) {
@@ -307,7 +422,8 @@ if (nrow(high_pairs) > 0) {
 
    nodes <- cent %>%
       left_join(within_village_counts, by = "Location") %>%
-      mutate(n_within_village = replace_na(n_within_village, 0L))
+      mutate(n_within_village = replace_na(n_within_village, 0L),
+             region = factor(region, levels = c("Western", "Central", "Eastern")))
 
    p_geo <- ggplot() +
       geom_segment(data = edges,
@@ -322,18 +438,27 @@ if (nrow(high_pairs) > 0) {
                           label = sprintf("%s\n(n=%d, %d within-village)",
                                           Location, n, n_within_village)),
                       size = 3, max.overlaps = 20) +
-      scale_size_continuous(name = "n samples", range = c(3, 10)) +
-      scale_linewidth_continuous(name = "high-IBD pairs", range = c(0.3, 3)) +
-      scale_fill_manual(values = c(west = "#D7263D", central = "#F46036",
-                                   east = "#2E86AB")) +
+      scale_size_continuous(name = "N samples", range = c(3, 10)) +
+      scale_linewidth_continuous(name = "High-IBD pairs", range = c(0.3, 3)) +
+      scale_fill_manual(values = c(Western = "#D7263D", Central = "#F46036",
+                                   Eastern = "#2E86AB")) +
       coord_quickmap() +
       labs(title = "Geographic network of high-IBD pairs",
            subtitle = sprintf("Edges link village pairs with >=1 hmmIBD pair > %.2f",
                               IBD_HIGH),
-           x = "Longitude", y = "Latitude") +
-      theme_minimal()
-   ggsave(file.path(out_dir, "ibd_geographic_network.pdf"), p_geo,
-          width = 10, height = 7, dpi = 600)
+           x = "Longitude", y = "Latitude", fill = "Regions") +
+      theme_minimal() +
+      theme(
+         legend.title  = element_text(size = 15, colour = "black", face = "bold", hjust = 0.5),
+         legend.text   = element_text(size = 13, colour = "black"),
+         plot.title    = element_text(size = 15, colour = "black", face = "bold"),
+         plot.subtitle = element_text(size = 11, colour = "gray70", face = "bold"),
+         axis.title    = element_text(size = 14, colour = "black", face = "bold"),
+         axis.text     = element_text(size = 13, colour = "black")
+      )
+  
+    ggsave(file.path(out_dir, "ibd_geographic_network.pdf"), 
+           plot = p_geo, width = 10, height = 7, dpi = 600)
 } else {
    log_msg("No high-IBD pairs — geographic network skipped.")
    file.create(file.path(out_dir, "ibd_geographic_network.pdf"))
