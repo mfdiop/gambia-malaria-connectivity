@@ -429,20 +429,21 @@ if (nrow(accepted) > 0) {
                 .groups = "drop")
    
    p_map <- ggplot() +
+      geom_point(data = cent,
+                 aes(x = lon, y = lat, colour = region), size = 5) +
       geom_segment(data = accepted,
                    aes(x = source_lon, y = source_lat,
                        xend = recipient_lon, yend = recipient_lat,
                        alpha = P_trans),
-                   arrow = arrow(length = unit(0.18, "cm"), type = "closed"),
-                   colour = "black") +
-      geom_point(data = cent,
-                 aes(x = lon, y = lat, colour = region), size = 4) +
-      geom_text_repel(data = cent,
+                   arrow = arrow(length = unit(0.25, "cm"), type = "closed"),
+                   colour = "darkred") +
+      # scale_colour_viridis_c() +  # viridis for continuous
+      geom_text_repel(data = cent, 
                       aes(x = lon, y = lat, label = Location),
-                      size = 3, max.overlaps = 30) +
+                      size = 3, max.overlaps = 30, color = "black") +
       scale_colour_manual(values = c(Western = "#D7263D", Central = "#F46036",
                                      Eastern = "#2E86AB"), name = "Region") +
-      scale_alpha_continuous(name = "P(transmission)", range = c(0.3, 1)) +
+      scale_alpha_continuous(name = "P(transmission)", range = c(0.1, 1), ) +
       labs(title = sprintf("Inferred directional transmission paths (n=%d)",
                            nrow(accepted)),
            subtitle = "Earlier-sampled = source; arrowhead = recipient",
