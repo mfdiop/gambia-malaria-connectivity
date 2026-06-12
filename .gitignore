@@ -5,6 +5,7 @@
 # -------- Data (large; may include identifiable coordinates) -----------------
 # Track via a separate data-sharing process, not via git.
 data/
+submission/
 
 # -------- Analysis outputs ---------------------------------------------------
 # All scripts in codes/ regenerate these from data/. Do not version-control.
@@ -54,3 +55,7 @@ Desktop.ini
 # -------- Word doc rebuilds (keep .md source, ignore rendered .docx/.pdf) ---
 notes/*.docx
 notes/*.pdf
+
+figure1_map_gambian_sample.R
+gitpush.sh
+.claude/
