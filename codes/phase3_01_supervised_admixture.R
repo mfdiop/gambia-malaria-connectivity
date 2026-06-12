@@ -79,7 +79,7 @@ out_dir   <- output_dir
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
 # ----- Parameters -----------------------------------------------------------
-REGIONS         <- c("west", "central", "east")
+REGIONS         <- c("Western", "Central", "Eastern")
 IMPORT_THRESH   <- 0.20         # proposal: >20% eastern ancestry -> import flag
 EM_MAX_ITER     <- 5000
 EM_TOL_Q        <- 1e-8         # max-abs step in Q (loose; fallback)
@@ -103,6 +103,7 @@ geno_lines <- readLines(geno_in)
 L <- length(geno_lines)
 n <- length(sample_ids)
 geno_pseudo <- matrix(0L, nrow = L, ncol = n)
+
 for (i in seq_len(L)) {
    chars <- strsplit(geno_lines[i], "", fixed = TRUE)[[1]]
    stopifnot(length(chars) == n)
@@ -122,8 +123,15 @@ log_msg(sprintf("Haploid matrix: %d observed, %d missing (%.2f%%)",
                 sum(!is.na(hap)), n_missing, 100 * n_missing / length(hap)))
 
 meta <- readRDS(meta_in)
-meta_aln <- meta %>% filter(SampleID %in% sample_ids) %>%
-   arrange(match(SampleID, sample_ids))
+meta_aln <- meta %>% 
+   filter(SampleID %in% sample_ids) %>%
+   arrange(match(SampleID, sample_ids)) %>% 
+   mutate(
+      transmission_season = recode(transmission_season, "early"= "Early", "peak" = "Peak", "late" = "Late"),
+      transmission_season = factor(transmission_season, 
+                                   levels = c("Early", "Peak", "Late"))
+      )
+
 stopifnot(all(meta_aln$SampleID == sample_ids))
 sample_region <- as.character(meta_aln$region)
 stopifnot(all(sample_region %in% REGIONS))
@@ -132,6 +140,7 @@ region_n <- table(factor(sample_region, levels = REGIONS))
 log_msg(paste0("Region sample sizes: ",
                paste(sprintf("%s=%d", names(region_n), region_n),
                      collapse = ", ")))
+
 if (any(region_n < MIN_REGION_N))
    stop(sprintf("At least one region has < %d samples; LOO unsafe.",
                 MIN_REGION_N))
@@ -144,11 +153,13 @@ if (any(region_n < MIN_REGION_N))
 # F_rl    : sum_rl / n_rl, clipped to (eps, 1-eps) for log-stability
 sum_rl <- matrix(0L, nrow = L, ncol = length(REGIONS))
 n_rl   <- matrix(0L, nrow = L, ncol = length(REGIONS))
+
 for (r_idx in seq_along(REGIONS)) {
    sub <- hap[, sample_region == REGIONS[r_idx], drop = FALSE]
    sum_rl[, r_idx] <- rowSums(sub, na.rm = TRUE)
    n_rl[, r_idx]   <- rowSums(!is.na(sub))
 }
+
 F_full <- sum_rl / pmax(n_rl, 1L)
 F_full[n_rl == 0L] <- NA_real_
 log_msg("Computed per-region allele frequencies (all samples).")
@@ -201,6 +212,7 @@ em_fit <- function(a, F) {
 }
 
 log_msg(sprintf("Running EM for %d samples (LOO on own region)...", n))
+
 Q_all <- matrix(NA_real_, nrow = n, ncol = length(REGIONS),
                 dimnames = list(sample_ids, REGIONS))
 iters     <- integer(n)
@@ -226,6 +238,7 @@ for (i in seq_len(n)) {
    final_step[i] <- res$step
    converged[i]  <- res$converged
 }
+
 log_msg(sprintf("EM done. Iter: median=%.0f max=%d; converged=%d/%d; final-step max=%.2e median=%.2e",
                 median(iters), max(iters), sum(converged), n,
                 max(final_step), median(final_step)))
@@ -240,27 +253,29 @@ Q_df <- as_tibble(Q_all, rownames = "SampleID") %>%
              by = "SampleID") %>%
    mutate(region = factor(region, levels = REGIONS),
           transmission_season = factor(transmission_season,
-                                       levels = c("early", "peak", "late")))
+                                       levels = c("Early", "Peak", "Late")))
+
 write_tsv(Q_df, file.path(out_dir, "ancestry_Q.tsv"))
 
 import_west <- Q_df %>%
-   filter(region == "west", east > IMPORT_THRESH) %>%
-   arrange(desc(east))
+   filter(region == "Western", Eastern > IMPORT_THRESH) %>%
+   arrange(desc(Eastern))
 write_tsv(import_west, file.path(out_dir, "importation_flags.tsv"))
 
 log_msg(sprintf("Western samples with Q_east > %.2f: %d / %d",
                 IMPORT_THRESH, nrow(import_west),
-                sum(Q_df$region == "west")))
+                sum(Q_df$region == "Western")))
 
 # Region-level Q summary
 region_summary <- Q_df %>%
    group_by(region) %>%
-   summarise(mean_Q_west    = mean(west),
-             mean_Q_central = mean(central),
-             mean_Q_east    = mean(east),
-             median_Q_east  = median(east),
-             frac_above_thresh = mean(east > IMPORT_THRESH),
+   summarise(mean_Q_west    = mean(Western),
+             mean_Q_central = mean(Central),
+             mean_Q_east    = mean(Eastern),
+             median_Q_east  = median(Eastern),
+             frac_above_thresh = mean(Eastern > IMPORT_THRESH),
              .groups = "drop")
+
 log_msg("Per-region mean Q:")
 log_msg(paste(capture.output(print(region_summary)), collapse = "\n"))
 write_tsv(region_summary, file.path(out_dir, "ancestry_region_summary.tsv"))
@@ -269,7 +284,10 @@ write_tsv(region_summary, file.path(out_dir, "ancestry_region_summary.tsv"))
 # 5. Plots
 # ============================================================================
 # 5a. Stacked-bar ancestry per sample, ordered by region then by Q_east
-order_df <- Q_df %>% arrange(region, east) %>% mutate(rank = row_number())
+order_df <- Q_df %>% 
+   arrange(region, Eastern) %>% 
+   mutate(rank = row_number())
+
 Q_long <- order_df %>%
    pivot_longer(all_of(REGIONS), names_to = "source", values_to = "prop") %>%
    mutate(source = factor(source, levels = REGIONS),
@@ -279,22 +297,32 @@ p_bar <- ggplot(Q_long, aes(x = SampleID, y = prop, fill = source)) +
    geom_col(width = 1) +
    facet_grid(~ region, scales = "free_x", space = "free_x", switch = "x") +
    scale_y_continuous(expand = c(0, 0), labels = percent) +
-   scale_fill_manual(values = c(west = "#D7263D", central = "#F46036",
-                                east = "#2E86AB"),
+   scale_fill_manual(values = c(Western = "#D7263D", 
+                                Central = "#F46036",
+                                Eastern = "#2E86AB"),
                      name = "Source region") +
    labs(title = "Supervised ancestry, K=3 regional sources (leave-one-out)",
         subtitle = sprintf("Samples within each region ordered by Q_east; n = %d", n),
         x = NULL, y = "Ancestry proportion") +
-   theme_minimal(base_size = 10) +
-   theme(axis.text.x = element_blank(),
-         axis.ticks.x = element_blank(),
-         panel.spacing.x = unit(0.2, "lines"),
-         strip.placement = "outside")
+   theme_minimal(base_size = 13) +
+   theme(
+      legend.title  = element_text(size = 14, color = "black", face = "bold", hjust = 0.5),
+      legend.text   = element_text(size = 11, color = "black"),
+      plot.title    = element_text(size = 13, color = "black", face = "bold"),
+      plot.subtitle = element_text(size = 10, color = "gray80", face = "bold"),
+      axis.text.x   = element_blank(),
+      axis.text.y   = element_text(size = 12, color = "black"),
+      axis.title    = element_text(size = 14, color = "black", face = "bold"),
+      axis.ticks.x  = element_blank(),
+      panel.spacing.x = unit(0.2, "lines"),
+      strip.placement = "outside"
+      )
+
 ggsave(file.path(out_dir, "ancestry_barplot.pdf"), p_bar,
        width = 12, height = 4, dpi = 600)
 
 # 5b. Q_east distribution per region (violin + jitter)
-p_qe <- ggplot(Q_df, aes(x = region, y = east, fill = region)) +
+p_qe <- ggplot(Q_df, aes(x = region, y = Eastern, fill = region)) +
    geom_violin(alpha = 0.5) +
    geom_boxplot(width = 0.18, outlier.shape = NA) +
    geom_jitter(width = 0.12, alpha = 0.7, size = 1.4) +
@@ -303,18 +331,28 @@ p_qe <- ggplot(Q_df, aes(x = region, y = east, fill = region)) +
    annotate("text", x = 0.55, y = IMPORT_THRESH + 0.02,
             label = sprintf("import threshold = %.2f", IMPORT_THRESH),
             hjust = 0, size = 3, colour = "red") +
-   scale_fill_manual(values = c(west = "#D7263D", central = "#F46036",
-                                east = "#2E86AB"), guide = "none") +
+   scale_fill_manual(values = c(Western = "#D7263D", Central = "#F46036",
+                                Eastern = "#2E86AB"), guide = "none") +
    labs(title = "Eastern-ancestry proportion (Q_east) by region",
         subtitle = "Supervised LOO admixture; western samples above red line = candidate imports",
         x = NULL, y = "Q_east") +
-   theme_minimal()
+   theme_minimal() +
+   theme(
+      plot.title    = element_text(size = 13, color = "black", face = "bold"),
+      plot.subtitle = element_text(size = 10, color = "gray80", face = "bold"),
+      axis.text     = element_text(size = 12, color = "black"),
+      axis.title    = element_text(size = 14, color = "black", face = "bold"),
+      axis.line         = element_line(linewidth = 1, colour = "black", lineend = "square"),
+      axis.ticks        = element_line(color = "black", linewidth = 0.7),
+      axis.ticks.length = unit(0.22, "cm")
+   )
+
 ggsave(file.path(out_dir, "ancestry_Q_east_by_region.pdf"), p_qe,
        width = 6.5, height = 4.5, dpi = 600)
 
 # 5c. Temporal: Q_east per season among west samples
-p_temp <- Q_df %>% filter(region == "west") %>%
-   ggplot(aes(x = transmission_season, y = east, fill = transmission_season)) +
+p_temp <- Q_df %>% filter(region == "Western") %>%
+   ggplot(aes(x = transmission_season, y = Eastern, fill = transmission_season)) +
    geom_violin(alpha = 0.5) +
    geom_boxplot(width = 0.15, outlier.shape = NA) +
    geom_jitter(width = 0.12, alpha = 0.75, size = 1.5) +
@@ -322,16 +360,27 @@ p_temp <- Q_df %>% filter(region == "west") %>%
    labs(title = "Western samples: Q_east by transmission season",
         subtitle = "Tests whether importation pressure shifts with season",
         x = "Transmission season", y = "Q_east") +
-   theme_minimal() + theme(legend.position = "none")
+   theme_minimal() +
+   theme(
+      legend.position = "none",
+      plot.title    = element_text(size = 13, color = "black", face = "bold"),
+      plot.subtitle = element_text(size = 10, color = "gray80", face = "bold"),
+      axis.text     = element_text(size = 12, color = "black"),
+      axis.title    = element_text(size = 14, color = "black", face = "bold"),
+      axis.line         = element_line(linewidth = 1, colour = "black", lineend = "square"),
+      axis.ticks        = element_line(color = "black", linewidth = 0.7),
+      axis.ticks.length = unit(0.22, "cm")
+   )
+
 ggsave(file.path(out_dir, "ancestry_temporal_west.pdf"), p_temp,
        width = 6, height = 4.5, dpi = 600)
 
 # Kruskal-Wallis on Q_east ~ season among west samples (>=2 seasons present)
-west_qd <- Q_df %>% filter(region == "west")
+west_qd <- Q_df %>% filter(region == "Western")
 if (nlevels(droplevels(west_qd$transmission_season)) >= 2 &&
     nrow(west_qd) >= 6) {
-   kw <- kruskal.test(east ~ transmission_season, data = west_qd)
-   log_msg(sprintf("Kruskal-Wallis Q_east ~ season (west): chi2 = %.3f, p = %.3g",
+   kw <- kruskal.test(Eastern ~ transmission_season, data = west_qd)
+   log_msg(sprintf("Kruskal-Wallis Q_east ~ season (West): chi2 = %.3f, p = %.3g",
                    kw$statistic, kw$p.value))
 } else {
    kw <- NULL
@@ -363,12 +412,22 @@ p_vill <- ggplot(vm_long, aes(x = Location, y = prop, fill = source)) +
              aes(x = Location, y = 1.02, label = sprintf("n=%d", n_samp)),
              inherit.aes = FALSE, size = 3, vjust = 0) +
    scale_y_continuous(limits = c(0, 1.07), expand = c(0, 0), labels = percent) +
-   scale_fill_manual(values = c(west = "#D7263D", central = "#F46036",
-                                east = "#2E86AB"), name = "Source") +
+   scale_fill_manual(values = c(Western = "#D7263D", Central = "#F46036",
+                                Eastern = "#2E86AB"), name = "Source") +
    labs(title = "Per-village mean ancestry composition",
         subtitle = "Villages ordered west -> east by longitude",
         x = NULL, y = "Mean ancestry proportion") +
-   theme_minimal() + theme(axis.text.x = element_text(angle = 30, hjust = 1))
+   theme_minimal() + 
+   theme(
+      legend.title  = element_text(size = 14, color = "black", face = "bold", hjust = 0.5),
+      legend.text   = element_text(size = 11, color = "black"),
+      plot.title    = element_text(size = 13, color = "black", face = "bold"),
+      plot.subtitle = element_text(size = 10, color = "gray80", face = "bold"),
+      axis.text.y   = element_text(size = 12, color = "black"),
+      axis.title    = element_text(size = 14, color = "black", face = "bold"),
+      axis.text.x   = element_text(angle = 30, hjust = 1)
+      )
+
 ggsave(file.path(out_dir, "ancestry_village_means.pdf"), p_vill,
        width = 8, height = 4.5, dpi = 600)
 
