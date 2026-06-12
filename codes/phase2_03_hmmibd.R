@@ -60,6 +60,7 @@ suppressPackageStartupMessages({
    library(vcfR)
    library(circlize)
    library(ggrepel)
+   library(sf)
 })
 
 # ----- Paths ----------------------------------------------------------------
@@ -268,7 +269,7 @@ log_msg(sprintf("Wilcoxon within vs cross-region: W = %.0f, p = %.3g",
 
 # Wilcoxon within vs cross-region: W = 13664234, p = 6.33e-20
 
-pair_df %>% 
+sum_reg <- pair_df %>% 
    group_by(pair_type) %>% 
    summarise(
       N = n(),
@@ -276,6 +277,9 @@ pair_df %>%
       Median = median(fract_sites_IBD),
       .groups = "drop"
    )
+
+log_msg(sprintf("Median IBD per region: %s, Median = %.3f, Mean = %.3f", 
+                sum_reg$pair_type, sum_reg$Median, sum_reg$Mean))
 
 # ============================================================================
 # 7. Distribution + within vs cross-village IBD
@@ -307,10 +311,10 @@ ggsave(file.path(out_dir, "ibd_within_vs_cross_village.pdf"),
 
 # Wilcoxon test for the cross-vs-within shift
 wt <- wilcox.test(fract_sites_IBD ~ pair_village, data = pair_df)
-log_msg(sprintf("Wilcoxon within vs cross-region: W = %.0f, p = %.3g",
+log_msg(sprintf("Wilcoxon within vs cross-village: W = %.0f, p = %.3g",
                 wt$statistic, wt$p.value))
 
-pair_df %>% 
+sum_vil <- pair_df %>% 
    group_by(pair_village) %>% 
    summarise(
       N = n(),
@@ -318,6 +322,9 @@ pair_df %>%
       Median = median(fract_sites_IBD),
       .groups = "drop"
    )
+
+log_msg(sprintf("Median IBD per village: %s, Median = %.3f, Mean = %.3f", 
+                sum_vil$pair_type, sum_vil$Median, sum_vil$Mean))
 
 
 # Effect Sizes
@@ -329,16 +336,18 @@ pair_df %>%
 # - Cliff's Delta (robust non-parametric effect size)
 # - Hodges–Lehmann estimate (difference magnitude)
 
-rstatix::wilcox_effsize(
+diff <- rstatix::wilcox_effsize(
    pair_df,
    fract_sites_IBD ~ pair_type
 )
+
+log_msg(sprintf("Effect sizes: %s, %s, Effect size (r):%.5f, n1:%d,  n2:%d, Magnitude:%s", 
+                diff$group1[1], diff$group2, diff$effsize, diff$n1, diff$n2, diff$magnitude))
 
 effectsize::rank_biserial(
    fract_sites_IBD ~ pair_type,
    data = pair_df
 )
-
 
 effsize::cliff.delta(
    fract_sites_IBD ~ pair_type,
@@ -459,6 +468,54 @@ if (nrow(high_pairs) > 0) {
   
     ggsave(file.path(out_dir, "ibd_geographic_network.pdf"), 
            plot = p_geo, width = 10, height = 7, dpi = 600)
+    
+    # ----------------------------------------------------------------
+    # -------- Generate summary maps to display counts --------------
+    # ----------------------------------------------------------------
+    map_gmb <- st_read("data/shapeFiles/geoBoundaries-GMB-ADM3.shp")
+    
+    # Create sf objects
+    map_df <- st_as_sf(cent, coords = c("lon", "lat"), crs = st_crs(map_gmb)) %>% 
+       mutate(region = factor(region, levels = c("Western", "Central", "Eastern")))
+    
+    plot <- ggplot() +
+       # draw the map
+       geom_sf(data = map_gmb, fill = "white", color = "black", linewidth = .4) +
+       
+       # Add shared IBD proportions
+       geom_segment(data = edges, aes(x = lon_a, y = lat_a, 
+                                      xend = lon_b, yend = lat_b, 
+                                      linewidth = n_high_pairs),
+                    colour = "tomato", alpha = 0.82, lineend = "round") +
+       # Add Locations
+       geom_point(data = nodes, aes(x = lon, y = lat, size = n, fill = region),
+                  shape = 21, colour = "black") +
+       
+       # Add annotations
+       geom_text_repel(data = nodes, aes(x = lon, y = lat,
+                                         label = sprintf("%s\n(n=%d, %d within-village)",
+                                                         Location, n, n_within_village)),
+                       size = 3, max.overlaps = Inf) +
+       
+       scale_size_continuous(name = "N samples", range = c(3, 10)) +
+       scale_linewidth_continuous(name = "High-IBD pairs", range = c(0.3, 3)) +
+       scale_fill_manual(values = c(Western = "#D7263D", Central = "#F46036",
+                                    Eastern = "#2E86AB")) +
+       theme_void() +
+       labs(title = "Geographic network of high-IBD pairs",
+            subtitle = sprintf("Edges link village pairs with >=1 hmmIBD pair > %.2f",
+                               IBD_HIGH),
+            x = NULL, y = NULL, fill = "Regions") +
+       theme(
+          legend.title  = element_text(size = 13, colour = "black", face = "bold", hjust = 0.5),
+          legend.text   = element_text(size = 11, colour = "black"),
+          plot.title    = element_text(size = 13, colour = "black", face = "bold", hjust = 0.1),
+          plot.subtitle = element_text(size = 10, colour = "gray70", face = "bold", hjust = 0.1),
+          axis.text     = element_blank())
+    
+    ggsave(file.path(out_dir, "ibd_geographic_map.pdf"), 
+           plot = plot, width = 10, height = 7, dpi = 600)
+    
 } else {
    log_msg("No high-IBD pairs — geographic network skipped.")
    file.create(file.path(out_dir, "ibd_geographic_network.pdf"))
