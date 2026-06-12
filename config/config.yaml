@@ -1,0 +1,19 @@
+# Sweep ranges
+k_range: [2, 3, 4, 5, 6, 7, 8, 9, 10]
+m_range: [0, 1, 2, 3, 4, 5]
+
+# Canonical defaults (picked after sweep + inspection; updated when chosen)
+canonical_k: 3
+canonical_m: 1
+
+# Cohort subsets
+subsets: ["allgambia", "westonly", "withsenegal"]
+
+# Cohort used for canonical `all` target (typically the one Phase 5 attributes on)
+canonical_subset: "withsenegal"
+
+# Paths to sibling-repo inputs (read internally by R scripts; declared here
+# for documentation, not used as Snakemake inputs per design decision D2)
+sibling:
+  raw_vcf_dir: "../01_objective1/01_data/raw_data"
+  metadata_dir: "../01_objective1/01_data/meta"
