@@ -1,0 +1,9 @@
+name: treemix
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - treemix=1.13
+  - plink=1.9
+  - bcftools
+  - python>=3.9

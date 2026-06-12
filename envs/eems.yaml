@@ -1,0 +1,9 @@
+name: eems
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - eems
+  - bcftools
+  - python>=3.9
+  - cxx-compiler

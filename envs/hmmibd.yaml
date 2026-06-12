@@ -1,0 +1,8 @@
+name: hmmibd
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - hmmibd
+  - bcftools
+  - python>=3.9

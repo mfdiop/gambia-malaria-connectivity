@@ -1,0 +1,9 @@
+name: chromopainter
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - chromopainter
+  - finestructure
+  - bcftools
+  - python>=3.9
