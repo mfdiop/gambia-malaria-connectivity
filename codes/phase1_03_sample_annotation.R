@@ -244,6 +244,59 @@ ggsave(file.path(out_dir, "sampling_map.pdf"), plot = p_map,
 
 # Add also a MAP as alternative or main figure
 
+# Load Gambian Shapfile
+map_gmb <- sf::st_read("data/shapeFiles/geoBoundaries-GMB-ADM3.shp")
+
+# ----------------------------------------------------------------
+# -------- Generate summary maps to display counts --------------
+# ----------------------------------------------------------------
+gc <- read_csv("data/metadata/gc_distances.csv", show_col_types = FALSE)
+
+cent <- vc %>%
+   inner_join(., gc, by = c("VillageCode" = "villages")) %>% 
+   group_by(Location, region) %>%
+   summarise(lon = weighted.mean(lon, n),
+             lat = weighted.mean(lat, n),
+             longitute = weighted.mean(longitute, n),
+             latitude = weighted.mean(latitude, n),
+             n   = sum(n), .groups = "drop")
+
+# Create sf objects
+map_df <- sf::st_as_sf(cent, coords = c("lon", "lat"), crs = sf::st_crs(map_gmb)) %>% 
+   mutate(region = factor(region, levels = c("Western", "Central", "Eastern")))
+
+# Create MAP
+plot.map <- ggplot() +
+   
+   # draw the map
+   geom_sf(data = map_gmb, fill = "white", color = "black", linewidth = .2) +
+   
+   # Add Locations
+   geom_point(data = village_pts, 
+              aes(x = lon, y = lat,  fill = region, size = N), 
+              alpha = 0.85, shape = 21) +
+   # Add annotations
+   ggrepel::geom_text_repel(data = village_pts, aes(x = lon, y = lat,
+                                label = sprintf("%s\n(n=%d)", Location, N)),
+                            fontface = "bold",
+                            size = 3.5, max.overlaps = 20, show.legend = FALSE) +
+   
+   scale_size_continuous(name = "N samples", range = c(3, 10)) +
+   scale_fill_manual(values = c(Western = "#D7263D", Central = "#F46036",
+                                Eastern = "#2E86AB")) +
+   theme_void() +
+   labs(title = NULL, x = NULL, y = NULL, fill = "Regions") +
+   theme(
+      legend.title  = element_text(size = 13, colour = "black", face = "bold", hjust = 0.5),
+      legend.text   = element_text(size = 11, colour = "black"),
+      plot.title    = element_text(size = 13, colour = "black", face = "bold", hjust = 0.1),
+      axis.text     = element_blank())
+
+print(plot.map)
+
+ggsave(file.path(out_dir, "geographic_sampling_map.pdf"), 
+       plot = plot.map, width = 10, height = 7, dpi = 600)
+
 # =============================================
 # --- 5b. Sampling calendar — month by region
 # =============================================
