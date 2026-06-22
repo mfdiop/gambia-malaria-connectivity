@@ -260,6 +260,7 @@ write_tsv(Q_df, file.path(out_dir, "ancestry_Q.tsv"))
 import_west <- Q_df %>%
    filter(region == "Western", Eastern > IMPORT_THRESH) %>%
    arrange(desc(Eastern))
+
 write_tsv(import_west, file.path(out_dir, "importation_flags.tsv"))
 
 log_msg(sprintf("Western samples with Q_east > %.2f: %d / %d",
