@@ -412,6 +412,7 @@ parameter_sweep <- function(hap, sample_region, REGIONS, sample_ids,
 
 sweep_param_df <- parameter_sweep(raw$hap, raw$sample_region, REGIONS, raw$sample_ids,
                                   WEST_LABEL, EAST_LABEL, threshold = IMPORT_THRESH)
+
 write_tsv(sweep_param_df, file.path(output_dir, "parameter_sweep.tsv"))
 log_msg(sprintf("Parameter sweep: %d/%d configs produced a usable fit",
                 sum(!is.na(sweep_param_df$n_flagged)), nrow(sweep_param_df)))
@@ -426,12 +427,14 @@ p_param <- ggplot(sweep_param_df %>% filter(!is.na(n_flagged)),
         subtitle = sprintf("Fixed at Q_east > %.2f; cells with NA = config infeasible", IMPORT_THRESH),
         x = "min_obs_per_region_snp", y = "min_region_n (LOO floor)") +
    theme_minimal()
+
 ggsave(file.path(output_dir, "parameter_sweep.pdf"), p_param, width = 6, height = 4.5, dpi = 600)
 
 # ============================================================================
 # Combined reviewer-facing summary
 # ============================================================================
 log_msg("--- Summary: candidate thresholds across methods ---")
+
 thresh_summary <- tibble(
    method = c("Protocol (a priori)",
               if (RUN_PERMUTATION) "Permutation null, 95th pct" else NA,
@@ -443,6 +446,7 @@ thresh_summary <- tibble(
                  mix_threshold)) %>%
    filter(!is.na(method))
 log_msg(paste(capture.output(print(thresh_summary)), collapse = "\n"))
+
 write_tsv(thresh_summary, file.path(output_dir, "threshold_comparison_summary.tsv"))
 
 saveRDS(list(Q_df_baseline = Q_df, threshold_sweep = sweep_df,
@@ -453,3 +457,4 @@ saveRDS(list(Q_df_baseline = Q_df, threshold_sweep = sweep_df,
 
 writeLines(log_lines, file.path(output_dir, "phase3_01b_summary.txt"))
 message("\nDone. Outputs in ", output_dir)
+
